@@ -4,152 +4,161 @@ import java.awt.geom.*;
 import java.awt.event.KeyListener;
 import java.awt.event.KeyEvent;
 import java.net.*;
-import java.awt.Image.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.net.*;
+import java.util.HashMap;
+import java.util.Map;
 import java.awt.image.BufferedImage;
 import javax.imageio.*;
+import com.google.gson.*;
 
-public class Canvas extends JPanel implements Runnable, KeyListener
-{
+import java.util.stream.Collectors;
+
+public class Canvas extends JPanel implements Runnable, KeyListener {
     private int width, height;
     private Thread thread;
     private String name;
     private boolean imageGenerated;
-    private String url;
-    private URL image;
     private BufferedImage aiImage;
     
-    public Canvas(int w, int h, JFrame frame)
-    {
+    public Canvas(int w, int h, JFrame frame) {
         width = w;
         height = h;
-        name = "Christine";
-        url = "";
+        name = "Chris";
         imageGenerated = false;
-        frame.addKeyListener(this);
+        this.addKeyListener(this);
+        setFocusable(true); // Ensure panel can receive focus
+        // requestFocusInWindow();
+        setPreferredSize(new Dimension(width, height));
         thread = new Thread(this);
         thread.start();
     }
     
-    public void run()
-    {
-        while(true)
-        {
+    public void addNotify() {
+        super.addNotify();
+        requestFocusInWindow(); // Now the panel is displayable
+    }
+    
+    public void run() {
+        while (true) {
             update();
-            try
-            {
-                thread.sleep(17);
-            }
-            catch (InterruptedException ie)
-            {
+            try {
+                Thread.sleep(17);
+            } catch (InterruptedException ie) {
                 ie.printStackTrace();
             }
             repaint();
         }
     }
     
-    protected void paintComponent(Graphics g)
-    {
-        Graphics2D g2 = (Graphics2D)g;
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g); // Clear the background
+        Graphics2D g2 = (Graphics2D) g;
         g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1f));
-        if (!imageGenerated)
-        {
+        
+        if (!imageGenerated) {
             drawBackground(g2);
-            g2.setFont(new Font("BOLD", 200, 200));
-            g2.drawString(name, (width / 2) - (width / 3) + 20, (height / 2) - (height / 75));
-        }
-        else if (url.length() > 0)
-        {
-            try
-            {
-                image = new URL(url);
-            }
-            catch (Exception e)
-            {
-                e.printStackTrace();
-            }
-            try
-            {
-                aiImage = ImageIO.read(image);
-            }
-            catch (IOException ioe)
-            {
-                ioe.printStackTrace();
-            }
+            g2.setFont(new Font("SansSerif", Font.BOLD, 100)); // Fixed font settings
+            FontMetrics fm = g2.getFontMetrics();
+            int x = (getWidth() - fm.stringWidth(name)) / 2;
+            int y = (getHeight() / 2) + fm.getAscent() / 2;
+            g2.drawString(name, x, y);
+        } else if (aiImage != null) {
             g2.drawImage(aiImage, 0, 0, width, height, null);
         }
     }
     
-    private void update()
-    {
-        
-    }
+    private void update() { }
     
-    private void drawBackground(Graphics2D g2)
-    {
-        Rectangle2D.Double r = new Rectangle2D.Double(-10, -10, width + 20, height + 20);
-        Rectangle2D.Double tBox = new Rectangle2D.Double((width / 2) - (width / 3), (height / 2) - (height / 6), width / 1.5, height / 5);
+    private void drawBackground(Graphics2D g2) {
+        int width = getWidth();
+        int height = getHeight();
         g2.setColor(Color.WHITE);
-        g2.fill(r);
+        g2.fillRect(-10, -10, width + 20, height + 20);
         g2.setColor(Color.BLACK);
-        g2.draw(tBox);
+        g2.drawRect((width / 6), (height / 3), 2 * width / 3, height / 3);
     }
     
-    public void keyPressed(KeyEvent e)
-    {
-        if (e.getKeyCode() == KeyEvent.VK_BACK_SPACE)
-        {
-            if (name.length() > 0)
-            {
+    @Override
+    public void keyPressed(KeyEvent e) {
+        if (e.getKeyCode() == KeyEvent.VK_BACK_SPACE) {
+            if (!name.isEmpty()) {
                 name = name.substring(0, name.length() - 1);
             }
-        }
-        else if (e.getKeyCode() >= KeyEvent.VK_A && e.getKeyCode() <= KeyEvent.VK_Z)
-        {
-            char letter = (char)e.getKeyCode();
-            name += letter;
-        }
-        else if (e.getKeyCode() == KeyEvent.VK_ENTER)
-        {
-            url = generateImage();
+        } else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+            new Thread(() -> {
+                String imageUrl = generateImage();
+                if (imageUrl != null && !imageUrl.isEmpty()) {
+                    try {
+                        BufferedImage img = ImageIO.read(new URL(imageUrl));
+                        SwingUtilities.invokeLater(() -> {
+                            aiImage = img;
+                            imageGenerated = true;
+                            repaint();
+                        });
+                    } catch (IOException ex) {
+                        ex.printStackTrace();
+                    }
+                }
+            }).start();
+        } else {
+            char c = e.getKeyChar();
+            if (Character.isLetter(c)) {
+                name += c;
+            }
         }
     }
     
-    public String generateImage()
-    {
-        String imageURL = "";
-        String prompt = "generate a background for the name " + name;
-        try
-        {
-            imageURL = callOpenAIAndReturnImage(prompt);
-        }
-        catch (IOException ioe)
-        {
+    private String generateImage() {
+        String prompt = "Generate an image with a vibe that matches the name \"" + name + "\", while also including the name \"" + name + "\" as text.";
+        try {
+            return callOpenAIAndReturnImage(prompt);
+        } catch (IOException ioe) {
             ioe.printStackTrace();
+            return "";
         }
-        return imageURL;
     }
     
-    
-    private String callOpenAIAndReturnImage(String prompt) throws IOException
-    {
-        String apiKey = "";
+    private String callOpenAIAndReturnImage(String prompt) throws IOException {
+        String apiKey = "This is public lol";
         String openAI_URL = "https://api.openai.com/v1/images/generations";
+        
+        HttpURLConnection conn = (HttpURLConnection) new URL(openAI_URL).openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+        
         Map<String, Object> payload = new HashMap<>();
         payload.put("prompt", prompt);
         payload.put("n", 1);
         payload.put("size", "1024x1024");
-        String jsonPayload = new com.google.gson.Gson().toJson(payload);
         
+        String json = new Gson().toJson(payload);
+        try (OutputStream os = conn.getOutputStream()) {
+            byte[] input = json.getBytes(StandardCharsets.UTF_8);
+            os.write(input, 0, input.length);
+        }
+        int responseCode = conn.getResponseCode();
+        if (responseCode == 200) {
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
+                JsonObject response = JsonParser.parseReader(br).getAsJsonObject();
+                JsonArray data = response.getAsJsonArray("data");
+                if (data.size() > 0) {
+                    return data.get(0).getAsJsonObject().get("url").getAsString();
+                }
+            }
+        } else {
+            
+            try (BufferedReader errorReader = new BufferedReader(new InputStreamReader(conn.getErrorStream()))) {
+                String errorMessage = errorReader.lines().collect(Collectors.joining("\n"));
+                System.err.println("Error from OpenAI API (" + responseCode + "): " + errorMessage);
+            }
+        }
+        return "";
     }
     
-    public void keyReleased(KeyEvent e)
-    {
-    }
-    public void keyTyped(KeyEvent e)
-    {
-    }
+    @Override public void keyReleased(KeyEvent e) { }
+    @Override public void keyTyped(KeyEvent e) { }
 }
