@@ -121,7 +121,7 @@ public class Canvas extends JPanel implements Runnable, KeyListener {
     }
     
     private String callOpenAIAndReturnImage(String prompt) throws IOException {
-        String apiKey = "This is public lol";
+        String apiKey = "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";
         String openAI_URL = "https://api.openai.com/v1/images/generations";
         
         HttpURLConnection conn = (HttpURLConnection) new URL(openAI_URL).openConnection();
